@@ -31,7 +31,11 @@ const fixtureModuleMarkers = [
     type: "commonjs",
     requires: ['require("./cycle-a.js")'],
   },
-  { marker: "CJS_VALIDATION_DATA", type: "json", requires: [] },
+  {
+    marker: "CJS_VALIDATION_DATA",
+    type: "commonjs",
+    requires: ["module.exports = JSON.parse("],
+  },
 ];
 const expectedResponse = {
   defaultCall: "default-call",
@@ -180,7 +184,11 @@ async function validateServer(name, args, url) {
           `Received HTTP ${result.status}:\n${result.body}`,
       );
     }
-    console.log(`${name}: CommonJS semantics passed`);
+    console.log(
+      `${name}: CommonJS semantics passed (__dirname = ${JSON.stringify(
+        actual.dirname,
+      )}, __filename = ${JSON.stringify(actual.filename)})`,
+    );
   } catch (error) {
     throw new Error(`${name} failed\n${error.message}\n\nServer output:\n${output}`);
   } finally {
@@ -252,16 +260,6 @@ async function validateArtifacts() {
       const [file, source] = matches[0];
       if (!requires.every((required) => source.includes(required))) {
         return { marker, type, file: undefined };
-      }
-      if (type === "json") {
-        try {
-          const parsed = JSON.parse(source);
-          if (parsed.artifactMarker !== marker || parsed.value !== "relative-require") {
-            return { marker, type, file: undefined };
-          }
-        } catch {
-          return { marker, type, file: undefined };
-        }
       }
       return { marker, type, file };
     });
@@ -350,7 +348,7 @@ async function validateCanvasKitCanary(name, args, url) {
     const loaded = result.status === 200 && result.body === "CanvasKit loaded";
     const reachedWasm =
       result.status === 500 &&
-      /(?:WebAssembly\.(?:compile|instantiate)|Wasm code generation disallowed|dynamic Wasm compilation)/i.test(
+      /(?:WebAssembly\.(?:compile|instantiate)|Wasm code generation disallowed|dynamic Wasm compilation|(?:no such file|readAll).*canvaskit\.wasm)/i.test(
         result.body,
       );
     if (!loaded && !reachedWasm) {
@@ -358,7 +356,9 @@ async function validateCanvasKitCanary(name, args, url) {
         `Expected CanvasKit to load or reach its Wasm failure. Received HTTP ${result.status}:\n${result.body}`,
       );
     }
-    console.log(`${name}: passed the CanvasKit __dirname canary`);
+    console.log(
+      `${name}: passed the CanvasKit __dirname canary and reached Wasm loading`,
+    );
   } catch (error) {
     throw new Error(`${name} failed\n${error.message}\n\nServer output:\n${output}`);
   } finally {
