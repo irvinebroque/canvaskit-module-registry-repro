@@ -36,6 +36,43 @@ The repository pins `canvaskit-wasm` 0.41.1, `@cloudflare/vite-plugin` 1.50.0,
 Vite 8.2.0, Wrangler 4.118.0, and workerd 1.20260730.1. It uses compatibility
 date `2026-08-02` with `nodejs_compat` and `new_module_registry`.
 
+## Try the proposed fix
+
+PR [cloudflare/workers-sdk#14982](https://github.com/cloudflare/workers-sdk/pull/14982)
+proposes a fix for this issue in Wrangler and the Cloudflare Vite plugin. You
+can try its preview builds with:
+
+```sh
+npm run demo:preview
+```
+
+The command uses the same checkout, configuration, and Worker source for both
+runs. It:
+
+1. Installs the stable versions pinned in `package-lock.json`.
+2. Reproduces `__dirname is not defined` with Wrangler and the Vite plugin.
+3. Installs both previews from PR #14982 without modifying the package files.
+4. Exercises Wrangler artifact and development modes plus Vite artifact,
+   development, and preview modes.
+5. Confirms the fixture sees `__dirname = "cjs-validation-fixture"` and
+   `__filename = "index.js"`, and that the unchanged CanvasKit Worker gets past
+   its `__dirname` access.
+
+The equivalent manual preview install is:
+
+```sh
+npm ci
+npm run repro
+npm run validate:baseline
+npm install --no-save --package-lock=false \
+  https://pkg.pr.new/wrangler@14982 \
+  https://pkg.pr.new/@cloudflare/vite-plugin@14982
+npm run validate
+```
+
+The demo leaves the previews in `node_modules` for inspection. Run `npm ci` to
+restore the pinned stable releases.
+
 ## Validate proposed fixes
 
 The repository also contains an npm CommonJS fixture that uses `__dirname`,

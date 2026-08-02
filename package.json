@@ -11,6 +11,7 @@
     "build:validation:wrangler": "wrangler deploy --config wrangler.validation.jsonc --dry-run --outdir dist-validation-wrangler",
     "dev:vite": "vite dev --host 127.0.0.1 --port 5173 --strictPort",
     "dev:wrangler": "wrangler dev --config wrangler.jsonc --port 8787 --no-latest",
+    "demo:preview": "node scripts/demo-preview.mjs",
     "repro": "node scripts/repro.mjs",
     "validate": "node scripts/validate.mjs",
     "validate:baseline": "node scripts/validate.mjs --expect-broken"
