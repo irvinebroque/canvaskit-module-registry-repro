@@ -7,15 +7,20 @@
   "scripts": {
     "build:vite": "vite build",
     "build:wrangler": "wrangler deploy --config wrangler.jsonc --dry-run --outdir dist-wrangler",
+    "build:validation:vite": "vite build --config vite.validation.config.js",
+    "build:validation:wrangler": "wrangler deploy --config wrangler.validation.jsonc --dry-run --outdir dist-validation-wrangler",
     "dev:vite": "vite dev --host 127.0.0.1 --port 5173 --strictPort",
     "dev:wrangler": "wrangler dev --config wrangler.jsonc --port 8787 --no-latest",
-    "repro": "node scripts/repro.mjs"
+    "repro": "node scripts/repro.mjs",
+    "validate": "node scripts/validate.mjs",
+    "validate:baseline": "node scripts/validate.mjs --expect-broken"
   },
   "engines": {
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "canvaskit-wasm": "0.41.1"
+    "canvaskit-wasm": "0.41.1",
+    "cjs-validation-fixture": "file:fixtures/cjs-validation-fixture"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.50.0",
