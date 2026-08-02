@@ -1,0 +1,26 @@
+{
+  "name": "cloudflare-canvaskit-dirname-repro",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reproduction of __dirname remaining undefined in CanvasKit with workerd's new module registry",
+  "scripts": {
+    "build:vite": "vite build",
+    "build:wrangler": "wrangler deploy --config wrangler.jsonc --dry-run --outdir dist-wrangler",
+    "dev:vite": "vite dev --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:wrangler": "wrangler dev --config wrangler.jsonc --port 8787 --no-latest",
+    "repro": "node scripts/repro.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "canvaskit-wasm": "0.41.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.50.0",
+    "vite": "8.2.0",
+    "wrangler": "4.118.0"
+  },
+  "license": "MIT"
+}

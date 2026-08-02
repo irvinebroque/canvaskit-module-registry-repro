@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "module-registry-commonjs-control",
+  "main": "./control/index.mjs",
+  "compatibility_date": "2026-08-02",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "new_module_registry"
+  ],
+  "no_bundle": true,
+  "rules": [
+    {
+      "type": "CommonJS",
+      "globs": ["**/*.cjs"]
+    }
+  ]
+}
