@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-wrangler/
+dist-validation-*/
 .wrangler/
 .dev.vars*
 .env*

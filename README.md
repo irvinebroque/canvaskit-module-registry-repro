@@ -36,6 +36,41 @@ The repository pins `canvaskit-wasm` 0.41.1, `@cloudflare/vite-plugin` 1.50.0,
 Vite 8.2.0, Wrangler 4.118.0, and workerd 1.20260730.1. It uses compatibility
 date `2026-08-02` with `nodejs_compat` and `new_module_registry`.
 
+## Validate proposed fixes
+
+The repository also contains an npm CommonJS fixture that uses `__dirname`,
+`__filename`, relative `require()`, JSON, a Node built-in, a cycle, and default
+and named ESM imports. The fixture has its own Worker configuration so it does
+not interfere with the CanvasKit reproduction.
+
+Confirm that the pinned releases exhibit the broken baseline:
+
+```sh
+npm run validate:baseline
+```
+
+To test a Workers SDK change, build and install the proposed Wrangler and
+`@cloudflare/vite-plugin` packages into this repository, then run:
+
+```sh
+npm run validate
+```
+
+The command validates:
+
+1. Wrangler's dry-run output keeps the fixture outside the entry ES module.
+2. Vite's production output keeps the fixture separate and emits a `CommonJS`
+   module rule.
+3. Wrangler development, Vite development, and Vite preview preserve CommonJS
+   runtime semantics.
+4. Both tools get CanvasKit past its `__dirname` failure. Its later dynamic-Wasm
+   failure is allowed because that is outside this reproduction's scope.
+
+`npm run validate` is expected to fail with the pinned releases. The definitive
+Wrangler unit test should additionally inspect the deployment multipart form and
+assert that the preserved source uses the `application/javascript` CommonJS MIME
+type; dry-run output does not retain that upload metadata.
+
 ## Why it fails
 
 `__dirname` is local to Node.js CommonJS wrappers; it is not a JavaScript global
