@@ -1,5 +1,10 @@
 # CanvasKit `__dirname` reproduction with workerd's new module registry
 
+> [cloudflare/workers-sdk#14982](https://github.com/cloudflare/workers-sdk/pull/14982)
+> proposes changes to Wrangler and the Cloudflare Vite plugin to address this
+> issue. See [Try the proposed fix](#try-the-proposed-fix) to test its preview
+> builds.
+
 This repository shows that importing `canvaskit-wasm` into a Cloudflare Worker
 fails with both the Cloudflare Vite plugin and Wrangler's built-in bundler:
 
