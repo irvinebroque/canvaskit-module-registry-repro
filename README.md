@@ -190,95 +190,81 @@ supplies the correct module type.
 
 ## What should change?
 
-### Option 1: make this dependency work after bundling
+Wrangler and the Cloudflare Vite plugin should preserve npm CommonJS boundaries
+automatically. Packages such as CanvasKit should not need Worker-specific source
+changes, and developers should not need to stage package files, write module
+rules, or list affected packages.
 
-CanvasKit or a build transform could avoid the free CommonJS `__dirname`
-reference in Worker-targeted output. Wrangler or Vite could also inject a
-module-specific `__dirname` and `__filename` into each bundled CommonJS wrapper.
-That can be automatic, but the virtual paths are useful only if any referenced
-files are also emitted at matching locations. A Worker-specific CanvasKit
-export could instead avoid selecting its Node file-loading path. These are
-smaller fixes for CanvasKit or wrapper globals, but they do not make general npm
-CommonJS dependencies use workerd's new module registry.
+While the new registry is experimental, `new_module_registry` can be the only
+switch. Once the registry becomes the default, this behavior can require no
+configuration. If changing bundling under the compatibility flag is too broad
+for an initial rollout, the fallback should be one high-level Wrangler or Vite
+option that enables automatic CommonJS preservation for the whole dependency
+graph. It should not expose the low-level upload rules or require a package
+allowlist.
 
-No workerd change would be needed for this option because the output would
-remain an ES module and would no longer expect CommonJS wrapper bindings.
+### Shared Workers SDK module graph
 
-### Option 2: preserve CommonJS boundaries for the runtime
+Wrangler and the Vite plugin need a shared npm module-graph implementation with
+adapters for esbuild and Vite. For every statically reachable dependency, it
+should:
 
-To use the new module registry, the build tool must preserve dependencies that
-need CommonJS behavior as separate runtime modules instead of embedding them in
-an ES-module chunk. This requires the build tool to:
+1. Resolve npm export conditions separately for `import` and `require()`.
+2. Classify each file as ESM, CommonJS, JSON, Wasm, text, or data.
+3. Preserve every reachable CommonJS file as a runtime `commonJsModule`, rather
+   than embedding it in an ES-module chunk.
+4. Preserve package-relative paths where possible and rewrite static specifiers
+   when needed so every edge points to an uploaded module.
+5. Resolve or rewrite static `require.resolve()` calls during the build because
+   workerd's CommonJS context does not currently expose `require.resolve`.
+6. Generate small ESM wrappers when ESM code uses statically detected CommonJS
+   named exports. Default imports can target `commonJsModule` directly.
+7. Emit the same typed graph in development, preview, and deployment.
 
-1. Resolve npm package exports and the dependency graph at build time.
-2. Classify each preserved file as ESM, CommonJS, JSON, Wasm, or another
-   runtime module type supported by workerd.
-3. Give each emitted file a stable runtime path. The tool can preserve a layout
-   compatible with existing relative specifiers or rewrite specifiers to the
-   emitted paths.
-4. Upload CommonJS source as `commonJsModule`. CanvasKit only needs its default
-   export. Named imports need either a small generated ESM wrapper or a
-   transport path for workerd's existing `namedExports` metadata.
-5. Use the same graph and module classifications in development, preview, and
-   deployment.
+workerd supports JSON modules, but the pinned Workers SDK
+[`CfModule` type](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/workers-utils/src/worker.ts)
+has no JSON transport type and
+[Vite preview currently maps JSON Build Output to data](https://github.com/cloudflare/workers-sdk/blob/%40cloudflare%2Fvite-plugin%401.50.0/packages/vite-plugin-cloudflare/src/miniflare-options.ts).
+The shared graph therefore also needs either end-to-end JSON transport support
+or generated JavaScript wrappers for JSON dependencies.
 
-The build tool must still perform npm resolution. workerd resolves names among
-the modules registered in the Worker bundle; it is not given a host
-`node_modules` directory and should not independently repeat npm's package
-resolution algorithm.
+Preserving all reachable CommonJS files is more reliable than scanning only for
+`__dirname`. A scan can miss generated code, transitive CommonJS modules,
+cycles, and other CommonJS behavior. Once the tool must build the dependency
+closure, preserving that closure gives workerd the module boundaries it was
+designed to execute.
 
-A proposed UX would not require a second user opt-in. `new_module_registry` is
-already an explicit compatibility flag, so Wrangler and the Vite plugin could
-use it as the signal to construct a mixed ESM and CommonJS graph automatically.
-
-Preserving every reachable CommonJS module would match CommonJS runtime
-semantics most closely. A narrower first implementation could preserve modules
-that reference CommonJS wrapper bindings such as `__dirname` or `__filename`,
-or that use `require()` in ways the normal bundle cannot represent. Either
-policy could avoid asking users to list affected packages.
-
-Static imports and static `require()` calls can be found at build time. Assets
-can be included when they are imported or matched by explicit module rules;
-arbitrary strings passed to filesystem APIs are not reliable dependency edges.
-Computed `require()` calls and computed filesystem paths cannot always be
-predicted. A build tool could include every published file from an affected
-package as a fallback, at the cost of a larger upload. Optional include and
-exclude controls would still be useful when the complete runtime file set
-cannot be determined automatically.
+workerd should continue to resolve names inside the uploaded graph. npm export
+resolution belongs in Workers SDK, where it can use the same conditions,
+aliases, and package layout as the build tool.
 
 ### Wrangler changes
 
-Wrangler already has most of the upload machinery. Its `CommonJS` rules,
-`find_additional_modules`, `base_dir`, and `preserve_file_names` options can
-discover and upload matching files from a staged source tree. The control in
-this repository demonstrates the `CommonJS` rule and upload path. These options
-do not preserve a package import such as `canvaskit-wasm`. The default path asks
-esbuild for an ESM bundle, so esbuild embeds CanvasKit in its own CommonJS
-interoperability wrapper.
+Wrangler's existing module rules and additional-module collector prove that it
+can upload a file as CommonJS. The control uses those internals only to validate
+workerd. They are not the proposed developer workflow.
 
-Wrangler is missing automatic npm-aware preservation. When
-`new_module_registry` is enabled, it would resolve package imports and export
-conditions, follow dependencies of those packages, assign stable runtime paths,
-keep the CommonJS modules out of the esbuild bundle, and pass them to the
-existing CommonJS upload path. `wrangler dev` and `wrangler deploy` must produce
-the same graph.
+Today, Wrangler's [`bundleWorker()`](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/wrangler/src/deployment-bundle/bundle.ts)
+asks esbuild for ESM output, so esbuild embeds CanvasKit in an internal CommonJS
+wrapper. Wrangler should instead run the shared npm graph when
+`new_module_registry` is enabled, keep discovered CommonJS files out of the ESM
+bundle, and add them automatically to its existing `CfModule[]` upload list.
+That [list already supports the `commonjs` type](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/workers-utils/src/worker.ts).
 
-The proposed default under the compatibility flag would not require a package
-list. Wrangler may still need diagnostics or optional include and exclude
-controls for packages with computed dependencies, large file sets, native
-addons, or other Node-specific behavior.
+The same graph builder must drive `wrangler dev`, `wrangler deploy`, dry runs,
+and remote development. Developers should still write only the normal import:
 
-Named imports from CommonJS need one additional choice. Wrangler can generate
-small ESM wrappers that read properties from the CommonJS default export, or
-Workers SDK and the deployment transport can be extended to carry statically
-detected names into workerd's existing `namedExports` field. CanvasKit uses a
-default import, so this reproduction does not require either change.
+```js
+import CanvasKitInit from "canvaskit-wasm";
+```
 
-Relevant implementation points in the pinned release are Wrangler's
-[`bundleWorker()`](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/wrangler/src/deployment-bundle/bundle.ts),
-which uses ESM output for module Workers, and its
-[`module-collection`](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/wrangler/src/deployment-bundle/module-collection.ts),
-which already represents separately supplied CommonJS files.
+No `no_bundle`, `find_additional_modules`, `base_dir`, `rules`, or
+`preserve_file_names` setting should be required.
+
+For ESM named imports from CommonJS, generated ESM wrappers are the least
+invasive first implementation. workerd has `namedExports` metadata, but the
+pinned Workers SDK upload type does not currently carry it. CanvasKit uses only
+a default import.
 
 ### Cloudflare Vite plugin changes
 
@@ -288,28 +274,44 @@ pipeline. In production it generates a no-bundle Wrangler configuration that
 Its [additional-module support](https://github.com/cloudflare/workers-sdk/blob/%40cloudflare%2Fvite-plugin%401.50.0/packages/vite-plugin-cloudflare/src/plugins/additional-modules.ts)
 covers compiled Wasm, data, and text, but not CommonJS.
 
-The plugin should use the same `new_module_registry` compatibility flag rather
-than require a separate Vite package list. It would need to:
+Vite development and production need different adapters over the same graph:
 
-1. Exclude automatically preserved CommonJS files from Vite dependency
-   optimization and CommonJS-to-ESM conversion.
-2. Resolve and emit the classified transitive graph with stable virtual names;
-   only its CommonJS files should be emitted as `.cjs`.
-3. Add appropriate rules for the emitted module types to the generated
-   production Wrangler configuration, including a `CommonJS` rule for `.cjs`
-   files instead of classifying them as ESM.
-4. Register CommonJS files as `commonJsModule` responses and preserve the other
-   classified types through the Workers SDK/Miniflare module graph during
-   development instead of evaluating all transformed bodies through Vite's
-   module runner.
-5. Restart or invalidate the runtime module graph when a preserved file
-   changes.
-6. Use the same ESM-facade or `namedExports` transport decision as Wrangler
-   for packages consumed through named imports.
+1. In development, classify CommonJS before dependency optimization converts
+   it to ESM. Vite's module runner should reference a canonical bundle URL, and
+   Miniflare's existing V2 module-fallback service should return the source as
+   `commonJsModule`. The
+   [Vitest pool fallback](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/vitest-pool-workers/src/pool/module-fallback.ts)
+   already contains npm resolution, CommonJS classification, named-export
+   detection, and ESM-wrapper logic that can serve as a blueprint. That logic
+   uses the older fallback protocol and must be adapted to
+   [Miniflare's V2 POST request format](https://github.com/cloudflare/workers-sdk/blob/wrangler%404.118.0/packages/miniflare/src/plugins/core/module-fallback.ts)
+   and canonical `/bundle` module names.
+2. In production, emit preserved CommonJS files as `.cjs`, emit ESM wrappers
+   for ESM consumers, and record each file's real type in the generated
+   Wrangler configuration or Build Output manifest.
+3. In preview, run the built typed graph rather than the development fallback,
+   so preview matches deployment.
+4. Restart the development runtime when a preserved module changes.
 
-Vite already resolves and classifies dependencies during optimization and
-production builds. It can retain a runtime CommonJS boundary when needed
-instead of always converting the module to Vite's ESM execution path.
+The plugin should activate this path from `new_module_registry`, not from a
+Vite-specific package list. Developers should not need to configure
+`optimizeDeps`, `ssr.noExternal`, or module rules.
+
+### Limits of automatic discovery
+
+Static imports, literal dynamic imports, and static `require()` calls can be
+included automatically. Imported assets and files matched by known module types
+can also be included. Computed `require()` calls, computed filesystem paths,
+runtime plugin discovery, and optional dependencies cannot always be determined
+from a production build. Native addons are unsupported by workerd and should
+produce a build error.
+
+For an opaque `__dirname`-based file lookup, tooling can conservatively include
+the package's published files and warn about the upload cost. If it still cannot
+construct a deployment-equivalent graph, it should report the unsupported edge
+instead of allowing development to succeed with a module that deployment omits.
+Advanced include or exclude controls may help with these cases, but they should
+not be part of the ordinary path.
 
 ### Required workerd changes
 
@@ -318,9 +320,11 @@ CanvasKit as `commonJsModule`. workerd already supplies the correct CommonJS
 context, resolves registered CommonJS dependencies, handles circular
 dependencies, and supports declared named exports.
 
-workerd could reduce the amount of build-tool work by adding npm package
-resolution, CommonJS named-export inference, or richer module-fallback
-behavior. None is required to fix this failure.
+The V2 module-fallback service is useful for Vite development, but production
+still needs a complete uploaded graph. npm resolution and ESM wrappers can be
+implemented in Workers SDK without changing workerd. Future workerd support for
+named-export inference could remove some generated wrappers, but it is not
+required for CanvasKit's default import.
 
 Preserving CanvasKit as CommonJS fixes only this first exception. CanvasKit's
 default Node path next expects to locate and read `canvaskit.wasm` as a file.
