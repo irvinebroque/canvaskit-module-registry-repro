@@ -36,11 +36,11 @@ The repository pins `canvaskit-wasm` 0.41.1, `@cloudflare/vite-plugin` 1.50.0,
 Vite 8.2.0, Wrangler 4.118.0, and workerd 1.20260730.1. It uses compatibility
 date `2026-08-02` with `nodejs_compat` and `new_module_registry`.
 
-## Compare stable and preview builds
+## Try the proposed fix
 
 PR [cloudflare/workers-sdk#14982](https://github.com/cloudflare/workers-sdk/pull/14982)
-publishes preview builds that preserve CommonJS modules when
-`new_module_registry` is enabled. Run the complete before-and-after demonstration:
+proposes a fix for this issue in Wrangler and the Cloudflare Vite plugin. You
+can try its preview builds with:
 
 ```sh
 npm run demo:preview
