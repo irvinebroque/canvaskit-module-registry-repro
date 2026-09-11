@@ -24,9 +24,9 @@
     "cjs-validation-fixture": "file:fixtures/cjs-validation-fixture"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.50.0",
+    "@cloudflare/vite-plugin": "1.54.7",
     "vite": "8.2.0",
-    "wrangler": "4.118.0"
+    "wrangler": "4.131.0"
   },
   "license": "MIT"
 }
